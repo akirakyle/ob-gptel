@@ -173,7 +173,9 @@ This function sends the BODY text to GPTel and returns the response."
                            gptel-backend))
                      gptel-backend)))
               (gptel-request
-                  body
+                  (org-babel-expand-body:generic
+	           body params
+	           (org-babel-variable-assignments:gptel params))
                 :callback
                 #'(lambda (response _info)
                     (when (stringp response)
