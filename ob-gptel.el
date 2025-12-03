@@ -37,27 +37,23 @@
     (:session . nil))
   "Default header arguments for gptel source blocks.")
 
-(defun ob-gptel-find-prompt (prompt &optional system-message)
+(defun ob-gptel-find-prompt (prompt)
   "Given a PROMPT identifier, find the block/result pair it names.
-The result is a directive in the format of `gptel-directives', which
-includes the SYSTEM-MESSAGE, the block as a message in the USER role,
-and the result in the ASSISTANT role."
-  (let ((directives (list system-message)))
-    (let ((block (org-babel-find-named-block prompt)))
-      (when block
-        (save-excursion
-          (goto-char block)
-          (let ((info (and block
-                           (save-excursion
-                             (goto-char block)
-                             (org-babel-get-src-block-info)))))
-            (when info
-              (nconc directives (list (and info (nth 1 info))))
-              (let ((result (org-babel-where-is-src-block-result nil info)))
-                (when result
-                  (goto-char result)
-                  (nconc directives (list (org-babel-read-result))))))))))
-    directives))
+The result is a directive in the format of `gptel-directives' with
+the block as a message in the USER role and the result in the ASSISTANT role.
+Note that a system message is not included at the start.
+Returns nil when no PROMPT block is found."
+  (let ((block (org-babel-find-named-block prompt)))
+    (when block
+      (save-excursion
+        (goto-char block)
+        (let ((info (org-babel-get-src-block-info)))
+          (when info
+            (let ((result (org-babel-where-is-src-block-result nil info)))
+              (list (nth 1 info)
+                    (when result
+                      (goto-char result)
+                      (org-babel-read-result))))))))))
 
 (defun ob-gptel--all-source-blocks (session)
   "Return all Source blocks before point with `:session' set to SESSION."
@@ -68,9 +64,6 @@ and the result in the ASSISTANT role."
       '(src-block)
     (lambda (element)
       (let ((start (org-element-property :begin element))
-            (language
-             (when (org-element-property :language element)
-               (string-trim (org-element-property :language element))))
             (parameters
              (when (org-element-property :parameters element)
                (org-babel-parse-header-arguments
@@ -78,7 +71,6 @@ and the result in the ASSISTANT role."
         (and (<= start (point))
              (equal session (cdr (assq :session parameters)))
              (list :start start
-                   :language language
                    :parameters parameters
                    :body
                    (when (org-element-property :value element)
@@ -91,21 +83,14 @@ and the result in the ASSISTANT role."
                          (goto-char (org-babel-where-is-src-block-result))
                          (org-babel-read-result))))))))))
 
-(defun ob-gptel-find-session (session &optional system-message)
+(defun ob-gptel-find-session (session)
   "Given a SESSION identifier, find the blocks/result pairs it names.
-The result is a directive in the format of `gptel-directives', which
-includes the SYSTEM-MESSAGE, and the blocks and their results as
-messages in the USER/ASSISTANT roles, respectively."
-  (let ((directives (list system-message)))
-    (let ((blocks (ob-gptel--all-source-blocks session)))
-      (dolist (block blocks)
-        (save-excursion
-          (nconc directives (list (plist-get block :body)))
-          (let ((result (plist-get block :result)))
-            (if result
-                (nconc directives (list result))
-              (nconc directives (list "\n")))))))
-    directives))
+The result is a directive in the format of `gptel-directives', but does not
+include a system message at the start. The blocks and their results alternate
+in the list as messages in the USER/ASSISTANT roles, respectively."
+  (mapcan (lambda (block)
+            (list (plist-get block :body) (plist-get block :result)))
+          (ob-gptel--all-source-blocks session)))
 
 (defun ob-gptel--add-context (context)
   "Call `gptel--transform-add-context' with the given CONTEXT."
@@ -134,10 +119,13 @@ This function sends the BODY text to GPTel and returns the response."
   (let* ((model (cdr (assoc :model params)))
          (temperature (cdr (assoc :temperature params)))
          (max-tokens (cdr (assoc :max-tokens params)))
-         (system-message (cdr (assoc :system params)))
          (backend-name (cdr (assoc :backend params)))
          (prompt (cdr (assoc :prompt params)))
+         (prompt-directives (when prompt (ob-gptel-find-prompt prompt)))
          (session (cdr (assoc :session params)))
+         (session-directives (when session (ob-gptel-find-session session)))
+         (system-message (or (cdr (assoc :system params)) gptel--system-message))
+         (directives (append (list system-message) session-directives prompt-directives))
          (preset (cdr (assoc :preset params)))
          (context (cdr (assoc :context params)))
          (dry-run (cdr (assoc :dry-run params)))
@@ -184,18 +172,9 @@ This function sends the BODY text to GPTel and returns the response."
                                 (goto-char match-start)
                                 (delete-region match-start match-end)
                                 (insert response))))))))
-                :buffer (current-buffer)
                 :transforms (list (ob-gptel--add-context context))
-                :system
-                (cond (prompt
-                       (with-current-buffer buffer
-                         (ob-gptel-find-prompt prompt system-message)))
-                      (session
-                       (with-current-buffer buffer
-                         (ob-gptel-find-session session system-message)))
-                      (system-message system-message))
-                :dry-run dry-run
-                :stream nil)))))
+                :system directives
+                :dry-run dry-run)))))
     (if dry-run
         (thread-first
           fsm
