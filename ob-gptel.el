@@ -173,9 +173,7 @@ This function sends the BODY text to GPTel and returns the response."
                            gptel-backend))
                      gptel-backend)))
               (gptel-request
-                  (org-babel-expand-body:generic
-	           body params
-	           (org-babel-variable-assignments:gptel params))
+                  body
                 :callback
                 #'(lambda (response _info)
                     (when (stringp response)
@@ -216,19 +214,6 @@ This function sends the BODY text to GPTel and returns the response."
   "Prepare SESSION according to PARAMS.
 GPTel blocks don't use sessions, so this is a no-op."
   session)
-
-(defun ob-gptel-var-to-gptel (var)
-  "Convert an elisp VAR into a string for GPTel."
-  (format "%S" var))
-
-(defun org-babel-variable-assignments:gptel (params)
-  "Return list of GPTel statements assigning variables from PARAMS."
-  (mapcar
-   (lambda (pair)
-     (format "%s = %s"
-             (car pair)
-             (ob-gptel-var-to-gptel (cdr pair))))
-   (org-babel--get-vars params)))
 
 ;;; This function courtesy Karthik Chikmagalur <karthik.chikmagalur@gmail.com>
 (defun ob-gptel-capf ()

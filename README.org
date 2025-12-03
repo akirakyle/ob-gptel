@@ -237,17 +237,10 @@ find /tmp -type f -links +1
 1. /Export Integration/: Use =:exports code=, =:exports results=, or =:exports both=
    to control what appears in exported documents.
 
-2. /Variables/: You can pass variables to your prompts:
-   #+begin_src org
-   ,#+begin_src gptel :var topic="Emacs"
-   Tell me about $topic
-   ,#+end_src
-   #+end_src
-
-3. /Caching/: Add =:cache yes= to avoid re-running expensive queries during
+2. /Caching/: Add =:cache yes= to avoid re-running expensive queries during
    export.
 
-4. /Templates/: Create template functions that generate gptel blocks with
+3. /Templates/: Create template functions that generate gptel blocks with
    predefined parameters.
 
 * Troubleshooting
