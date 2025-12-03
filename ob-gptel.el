@@ -66,33 +66,31 @@ and the result in the ASSISTANT role."
       (save-restriction
         (narrow-to-region (point-min) (point))
         (org-element-parse-buffer))
-      '(src-block fixed-width)
+      '(src-block)
     (lambda (element)
-      (cond ((eq (org-element-type element) 'src-block)
-             (let ((start
-                    (org-element-property :begin element))
-                   (language
-                    (when (org-element-property :language element)
-                      (string-trim (org-element-property :language element))))
-                   (parameters
-                    (when (org-element-property :parameters element)
-                      (org-babel-parse-header-arguments
-                       (string-trim (org-element-property :parameters element))))))
-               (and (<= start (point))
-                    (equal session (cdr (assq :session parameters)))
-                    (list :start start
-                          :language language
-                          :parameters parameters
-                          :body
-                          (when (org-element-property :value element)
-                            (string-trim (org-element-property :value element)))
-                          :result
-                          (save-excursion
-                            (save-restriction
-                              (goto-char (org-element-property :begin element))
-                              (when (org-babel-where-is-src-block-result)
-                                (goto-char (org-babel-where-is-src-block-result))
-                                (org-babel-read-result))))))))))))
+      (let ((start (org-element-property :begin element))
+            (language
+             (when (org-element-property :language element)
+               (string-trim (org-element-property :language element))))
+            (parameters
+             (when (org-element-property :parameters element)
+               (org-babel-parse-header-arguments
+                (string-trim (org-element-property :parameters element))))))
+        (and (<= start (point))
+             (equal session (cdr (assq :session parameters)))
+             (list :start start
+                   :language language
+                   :parameters parameters
+                   :body
+                   (when (org-element-property :value element)
+                     (string-trim (org-element-property :value element)))
+                   :result
+                   (save-excursion
+                     (save-restriction
+                       (goto-char (org-element-property :begin element))
+                       (when (org-babel-where-is-src-block-result)
+                         (goto-char (org-babel-where-is-src-block-result))
+                         (org-babel-read-result))))))))))
 
 (defun ob-gptel-find-session (session &optional system-message)
   "Given a SESSION identifier, find the blocks/result pairs it names.
