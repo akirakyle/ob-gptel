@@ -210,11 +210,6 @@ This function sends the BODY text to GPTel and returns the response."
           (pp-to-string))
       ob-gptel--uuid)))
 
-(defun org-babel-prep-session:gptel (session _params)
-  "Prepare SESSION according to PARAMS.
-GPTel blocks don't use sessions, so this is a no-op."
-  session)
-
 ;;; This function courtesy Karthik Chikmagalur <karthik.chikmagalur@gmail.com>
 (defun ob-gptel-capf ()
   (save-excursion
