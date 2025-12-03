@@ -35,7 +35,7 @@
     (:context . nil)
     (:prompt . nil)
     (:session . nil)
-    (:format . "org"))
+    (:format . "drawer"))
   "Default header arguments for gptel source blocks.")
 
 (defun ob-gptel-find-prompt (prompt &optional system-message)
@@ -109,10 +109,6 @@ messages in the USER/ASSISTANT roles, respectively."
                 (nconc directives (list result))
               (nconc directives (list "\n")))))))
     directives))
-
-;; Use gptel's built-in markdown to org converter
-(declare-function gptel--convert-markdown->org "gptel-org")
-(require 'gptel-org nil t) ;; Optional require for markdown->org conversion
 
 (defun ob-gptel--add-context (context)
   "Call `gptel--transform-add-context' with the given CONTEXT."
@@ -189,10 +185,7 @@ This function sends the BODY text to GPTel and returns the response."
                             (when (search-forward ob-gptel--uuid nil t)
                               (let* ((match-start (match-beginning 0))
                                      (match-end (match-end 0))
-                                     (formatted-response
-                                      (if (equal format "org")
-                                          (gptel--convert-markdown->org (string-trim response))
-                                        (string-trim response))))
+                                     (formatted-response (string-trim response)))
                                 (goto-char match-start)
                                 (delete-region match-start match-end)
                                 (insert formatted-response))))))))
@@ -205,7 +198,8 @@ This function sends the BODY text to GPTel and returns the response."
                          (ob-gptel-find-prompt prompt system-message)))
                       (session
                        (with-current-buffer buffer
-                         (ob-gptel-find-session session system-message))))
+                         (ob-gptel-find-session session system-message)))
+                      (system-message system-message))
                 :dry-run dry-run
                 :stream nil)))))
     (if dry-run
@@ -283,7 +277,7 @@ GPTel blocks don't use sessions, so this is a no-op."
                   :annotation-function (cdr comp-and-annotation))))))))
 
 (with-eval-after-load 'org-src
-  (add-to-list 'org-src-lang-modes '("gptel" . text)))
+  (add-to-list 'org-src-lang-modes '("gptel" . org)))
 
 (provide 'ob-gptel)
 
