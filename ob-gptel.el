@@ -23,7 +23,7 @@
 (require 'gptel)
 
 (defvar org-babel-default-header-args:gptel
-  '((:results . "replace")
+  '((:results . "raw drawer")
     (:exports . "both")
     (:model . nil)
     (:temperature . nil)
@@ -34,8 +34,7 @@
     (:preset . nil)
     (:context . nil)
     (:prompt . nil)
-    (:session . nil)
-    (:format . "drawer"))
+    (:session . nil))
   "Default header arguments for gptel source blocks.")
 
 (defun ob-gptel-find-prompt (prompt &optional system-message)
@@ -141,7 +140,6 @@ This function sends the BODY text to GPTel and returns the response."
          (session (cdr (assoc :session params)))
          (preset (cdr (assoc :preset params)))
          (context (cdr (assoc :context params)))
-         (format (cdr (assoc :format params)))
          (dry-run (cdr (assoc :dry-run params)))
          (buffer (current-buffer))
          (dry-run (and dry-run (not (member dry-run '("no" "nil" "false")))))
@@ -223,8 +221,7 @@ This function sends the BODY text to GPTel and returns the response."
                           ("dry-run" . "Don't send, instead return payload?")
                           ("system"  . "System message for request")
                           ("prompt"  . "Include result of other block")
-                          ("context" . "List of files to include")
-                          ("format"  . "Output format: markdown or org"))))
+                          ("context" . "List of files to include"))))
               (list start end (all-completions word args)
                     :annotation-function #'(lambda (c) (cdr-safe (assoc c args)))
                     :exclusive 'no))
@@ -248,8 +245,7 @@ This function sends the BODY text to GPTel and returns the response."
                                          (lambda (p) (thread-first
                                                   (cdr (assq (intern p) gptel--known-presets))
                                                   (plist-get :description)))))
-                         ("dry-run" (cons (list "t" "nil") (lambda (_) "" "Boolean")))
-                         ("format" (cons (list "markdown" "org") (lambda (_) "" "Output format"))))))
+                         ("dry-run" (cons (list "t" "nil") (lambda (_) "" "Boolean"))))))
             (list start end (all-completions word (car comp-and-annotation))
                   :exclusive 'no
                   :annotation-function (cdr comp-and-annotation))))))))
