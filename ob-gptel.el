@@ -21,6 +21,7 @@
 
 (require 'ob)
 (require 'gptel)
+;(require 'gptel-request)
 
 (defvar org-babel-default-header-args:gptel
   '((:results . "raw drawer")
@@ -92,96 +93,88 @@ in the list as messages in the USER/ASSISTANT roles, respectively."
             (list (plist-get block :body) (plist-get block :result)))
           (ob-gptel--all-source-blocks session)))
 
-(defun ob-gptel--add-context (context)
-  "Call `gptel--transform-add-context' with the given CONTEXT."
-  `(lambda (callback fsm)
-     (setq-local gptel-context--alist
-                 (quote ,(if (stringp context)
-                             (list (list context))
-                           (mapcar #'list context))))
-     (gptel--transform-add-context callback fsm)))
+(defmacro ob-gptel--request-callback (buffer uuid)
+  "Create callback for `gptel-request' that replaces the results with
+current uuid in buffer."
+  `(lambda (response _info)
+      (when (stringp response)
+        (with-current-buffer ,buffer
+          (save-excursion
+            (save-restriction
+              (widen)
+              (goto-char (point-min))
+              (when (search-forward ,uuid nil t)
+                (let* ((match-start (match-beginning 0))
+                       (match-end (match-end 0)))
+                  (goto-char match-start)
+                  (delete-region match-start match-end)
+                  (insert response)))))))))
 
-(defmacro ob-gptel--with-preset (name &rest body)
-  "Run BODY with gptel preset NAME applied.
-This macro can be used to create `gptel-request' command with settings
-from a gptel preset applied.  NAME is the preset name, typically a
-symbol."
-  (declare (indent 1))
-  `(let ((name ,name))
-     (cl-progv (and name (gptel--preset-syms (gptel-get-preset name)))
-         nil
-       (if name (gptel--apply-preset name))
-       ,@body)))
-
-(defun org-babel-execute:gptel (body params)
-  "Execute a gptel source block with BODY and PARAMS.
-This function sends the BODY text to GPTel and returns the response."
+(defun ob-gptel--execute (body params)
   (let* ((model (cdr (assoc :model params)))
+         (gptel-model (if model
+                       (if (symbolp model) model (intern model))
+                     gptel-model))
          (temperature (cdr (assoc :temperature params)))
+         (gptel-temperature (if (and temperature (stringp temperature))
+                       (string-to-number temperature)
+                       gptel-temperature))
          (max-tokens (cdr (assoc :max-tokens params)))
+         (gptel-max-tokens (if (and max-tokens (stringp max-tokens))
+                               (string-to-number max-tokens)
+                     gptel-max-tokens))
          (backend-name (cdr (assoc :backend params)))
+         (gptel-backend (if backend-name
+                            (gptel-get-backend backend-name)
+                          gptel-backend))
          (prompt (cdr (assoc :prompt params)))
          (prompt-directives (when prompt (ob-gptel-find-prompt prompt)))
          (session (cdr (assoc :session params)))
          (session-directives (when session (ob-gptel-find-session session)))
-         (system-message (or (cdr (assoc :system params)) gptel--system-message))
-         (directives (append (list system-message) session-directives prompt-directives))
-         (preset (cdr (assoc :preset params)))
-         (context (cdr (assoc :context params)))
+         (system-message (cdr (assoc :system params)))
+         (gptel--system-message (or system-message gptel--system-message))
+         (directives (append (list gptel--system-message)
+                             session-directives prompt-directives))
+         ;; context doesn't work as intended
+         ;; Can't figure out the difference in handling between
+         ;; - gptel-context--collect-media
+         ;; - gptel-context--collect
+         ;; and how each is called via gptel--transform-add-context
+         ;;(context (cdr (assoc :context params)))
+         ;;(gptel-track-media t)
+         ;;(gptel-context (if context
+         ;;                   (append gptel-context (split-string context))
+         ;;                 gptel-context))
+         ;(_ (print "context ************* "))
+         ;(_ (print context))
+         ;(_ (print "gptel-context ************* "))
+         ;(_ (print gptel-context))
+         ;(_ (print "gptel-use-context ************* "))
+         ;(_ (print gptel-use-context))
          (dry-run (cdr (assoc :dry-run params)))
-         (buffer (current-buffer))
          (dry-run (and dry-run (not (member dry-run '("no" "nil" "false")))))
-         (ob-gptel--uuid (concat "<gptel_thinking_" (org-id-uuid) ">"))
-         (fsm
-          (ob-gptel--with-preset (and preset (intern-soft preset))
-            (let ((gptel-model
-                   (if model
-                       (if (symbolp model) model (intern model))
-                     gptel-model))
-                  (gptel-temperature
-                   (if (and temperature (stringp temperature))
-                       (string-to-number temperature)
-                     gptel-temperature))
-                  (gptel-max-tokens
-                   (if (and max-tokens (stringp max-tokens))
-                       (string-to-number max-tokens)
-                     gptel-max-tokens))
-                  (gptel--system-message
-                   (or system-message
-                       gptel--system-message))
-                  (gptel-backend
-                   (if backend-name
-                       (let ((backend (gptel-get-backend backend-name)))
-                         (if backend
-                             (setq-local gptel-backend backend)
-                           gptel-backend))
-                     gptel-backend)))
-              (gptel-request
-                  body
-                :callback
-                #'(lambda (response _info)
-                    (when (stringp response)
-                      (with-current-buffer buffer
-                        (save-excursion
-                          (save-restriction
-                            (widen)
-                            (goto-char (point-min))
-                            (when (search-forward ob-gptel--uuid nil t)
-                              (let* ((match-start (match-beginning 0))
-                                     (match-end (match-end 0)))
-                                (goto-char match-start)
-                                (delete-region match-start match-end)
-                                (insert response))))))))
-                :transforms (list (ob-gptel--add-context context))
+         (uuid (concat "<gptel_thinking_" (org-id-uuid) ">"))
+         (buffer (current-buffer))
+         (fsm (gptel-request body
+                :callback (ob-gptel--request-callback buffer uuid)
+                :transforms '(gptel--transform-add-context)
                 :system directives
-                :dry-run dry-run)))))
+                :dry-run dry-run)))
     (if dry-run
         (thread-first
           fsm
           (gptel-fsm-info)
           (plist-get :data)
           (pp-to-string))
-      ob-gptel--uuid)))
+      uuid)))
+
+(defun org-babel-execute:gptel (body params)
+  "Execute a gptel source block with BODY and PARAMS.
+This function sends the BODY text to GPTel and returns the response."
+  (let ((preset (intern-soft (cdr (assoc :preset params)))))
+    (if preset
+        (gptel-with-preset preset (ob-gptel--execute body params))
+      (ob-gptel--execute body params))))
 
 ;;; This function courtesy Karthik Chikmagalur <karthik.chikmagalur@gmail.com>
 (defun ob-gptel-capf ()
