@@ -20,8 +20,7 @@
 ;;; Code:
 
 (require 'ob)
-(require 'gptel)
-;(require 'gptel-request)
+(require 'gptel-request)
 
 (defvar org-babel-default-header-args:gptel
   '((:results . "raw drawer")
@@ -33,6 +32,7 @@
     (:backend . nil)
     (:dry-run . nil)
     (:preset . nil)
+    (:media . nil)
     (:context . nil)
     (:prompt . nil)
     (:session . nil))
@@ -135,24 +135,14 @@ current uuid in buffer."
          (gptel--system-message (or system-message gptel--system-message))
          (directives (append (list gptel--system-message)
                              session-directives prompt-directives))
-         ;; context doesn't work as intended
-         ;; Can't figure out the difference in handling between
-         ;; - gptel-context--collect-media
-         ;; - gptel-context--collect
-         ;; and how each is called via gptel--transform-add-context
-         ;;(context (cdr (assoc :context params)))
-         ;;(gptel-track-media t)
-         ;;(gptel-context (if context
-         ;;                   (append gptel-context (split-string context))
-         ;;                 gptel-context))
-         ;(_ (print "context ************* "))
-         ;(_ (print context))
-         ;(_ (print "gptel-context ************* "))
-         ;(_ (print gptel-context))
-         ;(_ (print "gptel-use-context ************* "))
-         ;(_ (print gptel-use-context))
+         (media (cdr (assoc :media params)))
+         (gptel-track-media (not (member media '("no" "nil" nil))))
+         (context (cdr (assoc :context params)))
+         (gptel-context (if context
+                            (append gptel-context (split-string context))
+                          gptel-context))
          (dry-run (cdr (assoc :dry-run params)))
-         (dry-run (and dry-run (not (member dry-run '("no" "nil" "false")))))
+         (dry-run (not (member dry-run '("no" "nil" nil))))
          (uuid (concat "<gptel_thinking_" (org-id-uuid) ">"))
          (buffer (current-buffer))
          (fsm (gptel-request body
@@ -193,6 +183,7 @@ This function sends the BODY text to GPTel and returns the response."
                           ("dry-run" . "Don't send, instead return payload?")
                           ("system"  . "System message for request")
                           ("prompt"  . "Include result of other block")
+                          ("media"  . "Send the contents of all linked, supported files?")
                           ("context" . "List of files to include"))))
               (list start end (all-completions word args)
                     :annotation-function #'(lambda (c) (cdr-safe (assoc c args)))
@@ -217,6 +208,7 @@ This function sends the BODY text to GPTel and returns the response."
                                          (lambda (p) (thread-first
                                                   (cdr (assq (intern p) gptel--known-presets))
                                                   (plist-get :description)))))
+                         ("media" (cons (list "t" "nil") (lambda (_) "" "Boolean")))
                          ("dry-run" (cons (list "t" "nil") (lambda (_) "" "Boolean"))))))
             (list start end (all-completions word (car comp-and-annotation))
                   :exclusive 'no
